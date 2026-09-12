@@ -1,0 +1,216 @@
+<div class="page-intro">
+  <div>
+    <h1>What every tender is compared against</h1>
+    <p class="lede">
+      {{ org()?.name ?? 'This company' }} is matched on the statements below. The wording here
+      decides what surfaces, so a vague service line costs accuracy directly.
+    </p>
+  </div>
+</div>
+
+@if (error(); as message) {
+  <div class="banner error" role="alert">{{ message }}</div>
+}
+
+@if (loading()) {
+  <div class="state"><span class="spinner"></span> Loading profile…</div>
+} @else if (draft(); as d) {
+
+  @if (welcome() && empty()) {
+    <div class="banner welcome">
+      <span class="banner-body">
+        <span class="banner-title">Your account is ready — describe what you do</span>
+        <span>
+          Nothing can be matched yet. Add a few service lines in the words a tender would
+          use, save, then re-score. Three or four honest sentences are enough to start.
+        </span>
+      </span>
+    </div>
+  }
+
+  @if (rescored() !== null) {
+    <div class="banner ok-banner">Re-scored {{ rescored() }} results against the current profile.</div>
+  } @else if (saved()) {
+    <div class="banner ok-banner">Profile saved.</div>
+  }
+
+  @if (staleness(); as s) {
+    @if (s.stale && !empty()) {
+      <div class="banner stale">
+        <span class="banner-body">
+          <span class="banner-title"></span>
+          <span>
+            @if (s.lastScoredAt) {
+              {{ s.scoredCount | number }} tenders were scored against earlier wording.
+            } @else {
+              Nothing has been scored against this profile yet.
+            }
+            Re-scoring covers {{ s.scorable | number }} tenders.
+          </span>
+        </span>
+        <button class="btn btn-primary btn-sm" (click)="rescore()" [disabled]="rescoring()">
+          @if (rescoring()) { <span class="spinner light"></span> Re-scoring… }
+          @else { Re-score now }
+        </button>
+      </div>
+    }
+  }
+
+  <!-- ---------- service lines ---------- -->
+  <section class="card">
+    <div class="card-head">
+      <div>
+        <h2>Service lines</h2>
+        <span class="sub">{{ d.services.length }} statements · each embedded separately</span>
+      </div>
+    </div>
+    <div class="editor">
+      @for (s of d.services; track $index) {
+        <div class="line" [class.flagged]="noisy(s)">
+          <input type="text" [value]="s" (input)="setLine('services', $index, $any($event.target).value)"
+                 placeholder="e.g. Management information system design and rollout"
+                 [attr.aria-label]="'Service line ' + ($index + 1)" />
+          <button type="button" class="remove" (click)="removeLine('services', $index)"
+                  [attr.aria-label]="'Remove service line ' + ($index + 1)">×</button>
+        </div>
+      }
+      <button type="button" class="add" (click)="addLine('services')">+ Add a service line</button>
+    </div>
+    <div class="card-note">
+      Write these the way a tender describes the work, not the way an org chart does.
+      Rewording two lines once cut staffing false positives in the top 20 from 8 to 2.
+      Highlighted rows contain wording known to pull in work you probably do not want.
+    </div>
+  </section>
+
+  <!-- ---------- sectors ---------- -->
+  <section class="card">
+    <div class="card-head">
+      <div>
+        <h2>Service Sectors</h2>
+        <span class="sub">the hard gate — tenders outside these are never scored for you</span>
+      </div>
+    </div>
+    <div class="editor">
+      <div class="chips" role="group" aria-label="Sectors">
+        @for (s of sectorOptions(); track s.value) {
+          <button type="button" class="chip" [class.on]="hasSector(s.value)"
+                  [attr.aria-pressed]="hasSector(s.value)" (click)="toggleSector(s.value)">
+            {{ s.label }}
+          </button>
+        }
+      </div>
+    </div>
+  </section>
+
+  <!-- ---------- organisation ---------- -->
+  <section class="card">
+    <div class="card-head"><h2>Organisation</h2></div>
+    <div class="editor">
+      <label class="field">
+        <span class="label">Company name</span>
+        <input type="text" [value]="d.orgName" (input)="setName($any($event.target).value)" />
+      </label>
+      <label class="field">
+        <span class="label">Summary</span>
+        <textarea rows="3" [value]="d.summary" (input)="setSummary($any($event.target).value)"
+                  placeholder="One paragraph on what this company delivers and for whom."></textarea>
+      </label>
+      <div class="two">
+        <label class="field">
+          <span class="label">Annual turnover (BDT)</span>
+          <input type="text" class="mono" [value]="d.annualTurnoverBdt ?? ''"
+                 (input)="setTurnover($any($event.target).value)" placeholder="1200000000" />
+          <span class="hint">Checked against every stated turnover threshold</span>
+        </label>
+        <div class="field">
+          <span class="label">Geographies</span>
+          @for (g of d.geographies; track $index) {
+            <div class="line compact">
+              <input type="text" [value]="g"
+                     (input)="setLine('geographies', $index, $any($event.target).value)" />
+              <button type="button" class="remove" (click)="removeLine('geographies', $index)"
+                      aria-label="Remove geography">×</button>
+            </div>
+          }
+          <button type="button" class="add" (click)="addLine('geographies')">+ Add</button>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <!-- ---------- certifications ---------- -->
+  <section class="card">
+    <div class="card-head">
+      <div>
+        <h2>Certifications</h2>
+        <span class="sub">checked by the eligibility rules · expiry is enforced</span>
+      </div>
+    </div>
+    <div class="editor">
+      @for (c of d.certifications; track $index) {
+        <div class="row-3">
+          <input type="text" [value]="c.code" placeholder="ISO27001"
+                 (input)="setCertification($index, 'code', $any($event.target).value)"
+                 aria-label="Certification code" />
+          <input type="text" [value]="c.name" placeholder="ISO/IEC 27001 Information Security"
+                 (input)="setCertification($index, 'name', $any($event.target).value)"
+                 aria-label="Certification name" />
+          <input type="date" [value]="c.validUntil"
+                 (input)="setCertification($index, 'validUntil', $any($event.target).value)"
+                 aria-label="Valid until" />
+          <button type="button" class="remove" (click)="removeCertification($index)"
+                  aria-label="Remove certification">×</button>
+        </div>
+      }
+      <button type="button" class="add" (click)="addCertification()">+ Add a certification</button>
+    </div>
+  </section>
+
+  <!-- ---------- past projects ---------- -->
+  <section class="card">
+    <div class="card-head">
+      <div>
+        <h2>Past projects</h2>
+        <span class="sub">
+          {{ d.pastProjects.length }} references · title and description are both matched
+        </span>
+      </div>
+    </div>
+    <div class="editor">
+      @for (p of d.pastProjects; track $index) {
+        <div class="project">
+          <div class="row-3">
+            <input type="text" [value]="p.title" placeholder="Project title"
+                   (input)="setProject($index, 'title', $any($event.target).value)"
+                   aria-label="Project title" />
+            <input type="text" [value]="p.client" placeholder="Client"
+                   (input)="setProject($index, 'client', $any($event.target).value)"
+                   aria-label="Client" />
+            <input type="text" class="mono" [value]="p.year ?? ''" placeholder="2024"
+                   (input)="setProjectNumber($index, 'year', $any($event.target).value)"
+                   aria-label="Year" />
+            <button type="button" class="remove" (click)="removeProject($index)"
+                    aria-label="Remove project">×</button>
+          </div>
+          <textarea rows="2" [value]="p.description" placeholder="What was delivered."
+                    (input)="setProject($index, 'description', $any($event.target).value)"
+                    aria-label="Project description"></textarea>
+        </div>
+      }
+      <button type="button" class="add" (click)="addProject()">+ Add a project</button>
+    </div>
+  </section>
+
+  @if (dirty()) {
+    <div class="savebar">
+      <span class="sd">Unsaved changes</span>
+      <span class="acts">
+        <button class="btn btn-sm" (click)="discard()" [disabled]="saving()">Discard</button>
+        <button class="btn btn-primary btn-sm" (click)="save()" [disabled]="saving()">
+          @if (saving()) { <span class="spinner light"></span> Saving… } @else { Save profile }
+        </button>
+      </span>
+    </div>
+  }
+}

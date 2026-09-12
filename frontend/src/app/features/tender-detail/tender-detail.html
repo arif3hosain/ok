@@ -1,0 +1,260 @@
+@if (error(); as message) {
+  <div class="banner error">{{ message }}</div>
+} @else if (loading()) {
+  <div class="state"><span class="spinner"></span> Loading tender…</div>
+} @else if (tender(); as t) {
+
+  <nav class="crumb">
+    <a routerLink="/shortlist">Tender list</a>
+    <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor"
+         stroke-width="2.4" stroke-linecap="round"><path d="m9 6 6 6-6 6" /></svg>
+    <span>Tender {{ t.externalId }}</span>
+  </nav>
+
+  <header class="detail-head">
+    <div class="detail-identity">
+      <ts-grade-badge [grade]="evidence()?.grade ?? null" class="big" />
+      <div>
+        <h1>{{ t.aiShortTitle ?? t.title ?? '(untitled tender)' }}</h1>
+        <div class="detail-meta">
+          <span>{{ sourceLabel(t.source) }}</span>
+          @if (t.buyer) {
+            <span class="sep">•</span><span>{{ t.buyer }}</span>
+          }
+        </div>
+        @if (t.aiShortTitle) {
+          <p class="full-title"><span class="ai-tag">Short title by AI</span> {{ t.title }}</p>
+        }
+      </div>
+    </div>
+
+    <!-- Actions top right; the three figures that decide "do we bid?" bottom right. -->
+    <div class="detail-side">
+      <ts-tender-actions class="detail-actions" [row]="t"
+                         (changed)="actionError.set(null)" (failed)="actionError.set($event)" />
+      <div class="detail-figures">
+        <span class="figure">
+          <span class="label">Match score</span>
+          <span class="num">{{ percent() }}</span>
+        </span>
+        <span class="figure">
+          <span class="label">Closes in</span>
+          <span class="num" [class.warn]="urgent()">{{ closesIn() }}</span>
+        </span>
+        @if (advice(); as a) {
+          <span class="figure">
+            <span class="label">Recommendation</span>
+            <span class="pill rec" [class.accent]="a.action === 'BID'" [class.neutral]="a.action === 'HOLD'"
+                  [class.ghost]="a.action === 'SKIP'" [title]="a.hint">{{ a.label }}</span>
+          </span>
+        }
+      </div>
+    </div>
+  </header>
+
+  @if (actionError(); as message) {
+    <div class="banner error">{{ message }}</div>
+  }
+
+  <div class="split">
+    <div class="stack">
+      @if (t.aiSummary || t.aiDeliverables.length) {
+        <section class="card">
+          <div class="card-head">
+            <div>
+              <h2>What they want</h2>
+              <span class="sub">Summarised from the notice. Check the notice itself before you bid.</span>
+            </div>
+            <span class="ai-tag">AI summary</span>
+          </div>
+          @if (t.aiSummary) {
+            <p class="prose">{{ t.aiSummary }}</p>
+          }
+          @if (t.aiDeliverables.length) {
+            <ul class="deliverables">
+              @for (d of t.aiDeliverables; track $index) {
+                <li>{{ d }}</li>
+              }
+            </ul>
+          }
+        </section>
+      }
+
+      <!-- The same labels for every portal; a field the portal does not give is left out. -->
+      <section class="card">
+        <div class="card-head"><h2>Tender details</h2></div>
+        <div class="facts">
+          @for (f of facts(); track f.label) {
+            <div class="fact">
+              <span class="label">{{ f.label }}</span>
+              <span class="val" [class.warn]="f.warn">{{ f.value }}</span>
+            </div>
+          }
+        </div>
+      </section>
+
+      <section class="card">
+        <div class="card-head">
+          <div>
+            <h2>Eligibility requirements</h2>
+            <span class="sub">As written on the portal.</span>
+          </div>
+        </div>
+        <p class="prose">
+          @if (t.eligibilityText) {
+            {{ t.eligibilityText }}
+          } @else {
+            <span class="muted">The portal lists no eligibility requirements for this tender.</span>
+          }
+        </p>
+      </section>
+    </div>
+
+    <div class="stack">
+      <section class="card">
+        <div class="card-head">
+          <div>
+            <h2>Matched Criteria</h2>
+            @if (headline(); as h) { <span class="sub">{{ h }}</span> }
+          </div>
+        </div>
+
+        @if (evidence(); as ev) {
+          <div class="comparison">
+            @if (summaryPending()) {
+              <div class="writing" role="status" aria-live="polite">
+                <span class="spinner"></span> Loading matching criteria…
+              </div>
+            } @else if (summary(); as sum) {
+              @if (sum.comparison) { <p class="lede">{{ sum.comparison }}</p> }
+
+              @if (sum.matches.length) {
+                <span class="label">Where your work meets this tender</span>
+                <ul class="points">
+                  @for (m of sum.matches; track m) { <li>{{ m }}</li> }
+                </ul>
+              }
+
+              @if (sum.gaps.length) {
+                <span class="label">What this tender asks for that your profile does not show</span>
+                <ul class="points gaps">
+                  @for (g of sum.gaps; track g) { <li>{{ g }}</li> }
+                </ul>
+              }
+
+              @if (provenance(); as line) {
+                <span class="hint">{{ line }}</span>
+              }
+            }
+          </div>
+
+          <div class="criteria">
+            <span class="label">Sector</span>
+            <div class="chips">
+              <span class="mchip sector">
+                <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor"
+                     stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><path d="M20 6 9 17l-5-5" /></svg>
+                {{ t.sectorLabel ?? 'Not classified' }}
+              </span>
+            </div>
+          </div>
+
+          <div class="criteria">
+            <span class="label">Your services that match</span>
+            @if (services().length) {
+              <div class="chips">
+                @for (s of services(); track s.name; let first = $first) {
+                  <span class="mchip" [class.top]="first" [title]="s.full">
+                    @if (first) {
+                      <svg width="13" height="13" viewBox="0 0 24 24" fill="currentColor" stroke="none">
+                        <path d="m12 3 2.7 5.6 6.3.9-4.5 4.3 1.1 6.2L12 17.1 6.4 20l1.1-6.2L3 9.5l6.3-.9z" />
+                      </svg>
+                    }
+                    {{ s.name }}
+                  </span>
+                }
+              </div>
+              <span class="hint">Closest match first. Hover a chip to read it in full.</span>
+            } @else {
+              <span class="hint">None of your services is a close match for this tender.</span>
+            }
+          </div>
+
+          @if (ev.demotedFor) {
+            <div class="criteria">
+              <span class="label">Watch out</span>
+              <div class="chips">
+                <span class="mchip warn" [title]="ev.demotedFor">
+                  Similar to work you don't take on: {{ shortName(ev.demotedFor) }}
+                </span>
+              </div>
+            </div>
+          }
+        } @else {
+          <div class="state">This tender has not been matched against your profile yet.</div>
+        }
+      </section>
+
+      <section class="card">
+        <div class="card-head">
+          <h2>Eligibility check</h2>
+          <ts-eligibility-chip [status]="eligibility()?.status ?? null" />
+        </div>
+
+        @if (blockingGaps().length === 0 && checkGaps().length === 0) {
+          <div class="gap pass">
+            <span class="icon">
+              <svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor"
+                   stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><path d="M20 6 9 17l-5-5" /></svg>
+            </span>
+            <span class="gap-body">
+              <span class="gap-title">You meet every requirement we check</span>
+              <span class="hint">Annual turnover, certifications and location.</span>
+            </span>
+          </div>
+        }
+
+        @for (g of blockingGaps(); track g.ruleCode) {
+          <div class="gap blocking">
+            <span class="icon">
+              <svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor"
+                   stroke-width="2.4" stroke-linecap="round"><path d="M18 6 6 18" /><path d="m6 6 12 12" /></svg>
+            </span>
+            <span class="gap-body">
+              <span class="gap-title">{{ g.requirement ?? g.ruleCode }}</span>
+              @if (g.actual) { <span class="hint">{{ g.actual }}</span> }
+              @if (g.message) { <span class="gap-msg bad">{{ g.message }}</span> }
+            </span>
+          </div>
+        }
+
+        @if (aiRequirements().length) {
+          <div class="ai-reqs">
+            <span class="label">Requirements found by AI in the notice</span>
+            <ul>
+              @for (r of aiRequirements(); track r) {
+                <li>{{ r }}</li>
+              }
+            </ul>
+          </div>
+        }
+
+        @for (g of checkGaps(); track g.ruleCode) {
+          <div class="gap check">
+            <span class="icon">
+              <svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor"
+                   stroke-width="2.2" stroke-linecap="round">
+                <circle cx="12" cy="12" r="9" /><path d="M12 8v5" /><path d="M12 16.4v.01" />
+              </svg>
+            </span>
+            <span class="gap-body">
+              <span class="gap-title">{{ g.requirement ?? g.ruleCode }}</span>
+              @if (g.actual) { <span class="hint">{{ g.actual }}</span> }
+              @if (g.message) { <span class="gap-msg warn">{{ g.message }}</span> }
+            </span>
+          </div>
+        }
+      </section>
+    </div>
+  </div>
+}
